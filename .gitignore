@@ -1,0 +1,10 @@
+# .NET Core
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+
+# Ignore UI subfolder so it can be its own separate repo
+EmailAI.UI/

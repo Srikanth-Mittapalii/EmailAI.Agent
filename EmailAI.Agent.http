@@ -1,0 +1,6 @@
+@EmailAI.Agent_HostAddress = http://localhost:5180
+
+GET {{EmailAI.Agent_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

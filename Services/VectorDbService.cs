@@ -24,19 +24,26 @@ namespace EmailAI.Agent.Services
             return email;
         }
 
+        public async Task<bool> EmailExistsByGmailId(string gmailId, string userId)
+        {
+            return await _collection.Find(e => e.GmailId == gmailId && e.UserId == userId).AnyAsync();
+        }
+ 
         public async Task<Email> GetEmailById(string emailId, string userId)
         {
             return await _collection.Find(e => e.Id == emailId && e.UserId == userId).FirstOrDefaultAsync();
         }
 
-        public async Task<List<Email>> SearchByVector(double[] embedding, string userId, int limit = 5)
+        public async Task<List<Email>> SearchByVector(double[] embedding, string userId, int limit = 5, DateTime? startTime = null)
         {
             try
             {
-                // Atlas Vector Search usually requires a $vectorSearch stage or similar depending on the exact provider.
-                // For simplicity and multi-tenancy, we will use a filter if supported, 
-                // but here we will implement the $match to ensure the user only sees their data.
-                
+                var matchFilter = new BsonDocument { { "userId", userId } };
+                if (startTime.HasValue)
+                {
+                    matchFilter.Add("timestamp", new BsonDocument { { "$gte", startTime.Value } });
+                }
+
                 var pipelineDefinition = new BsonDocument[]
                 {
                     new BsonDocument
@@ -47,8 +54,8 @@ namespace EmailAI.Agent.Services
                             {
                                 { "cosmosSearch", new BsonDocument
                                     {
-                                        { "vector", new BsonArray(embedding.Cast<BsonValue>()) },
-                                        { "k", limit * 2 } // Search more to allow for user filtering
+                                        { "vector", new BsonArray(embedding.Select(d => (BsonValue)d)) },
+                                        { "k", limit * 5 } 
                                     }
                                 }
                             }
@@ -56,7 +63,7 @@ namespace EmailAI.Agent.Services
                     },
                     new BsonDocument
                     {
-                        { "$match", new BsonDocument { { "userId", userId } } }
+                        { "$match", matchFilter }
                     },
                     new BsonDocument
                     {
@@ -70,7 +77,12 @@ namespace EmailAI.Agent.Services
             catch
             {
                 // Fallback to simple query with user filter
-                return await _collection.Find(e => e.UserId == userId).Limit(limit).ToListAsync();
+                var query = _collection.Find(e => e.UserId == userId);
+                if (startTime.HasValue)
+                {
+                    query = _collection.Find(e => e.UserId == userId && e.Timestamp >= startTime.Value);
+                }
+                return await query.Limit(limit).ToListAsync();
             }
         }
 

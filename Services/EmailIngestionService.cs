@@ -22,7 +22,7 @@ namespace EmailAI.Agent.Services
             _vectorDbService = vectorDbService;
         }
 
-        public async Task<Email> ProcessAndStoreEmail(string subject, string body, string sender, string userId)
+        public async Task<Email> ProcessAndStoreEmail(string subject, string body, string sender, string userId, string? gmailId = null)
         {
             // Step 1: Generate embedding
             var embedding = await _embeddingService.GenerateEmbedding($"{subject} {body}");
@@ -62,6 +62,7 @@ Respond ONLY with the action name (one word).
             var email = new Email
             {
                 UserId = userId,
+                GmailId = gmailId,
                 Subject = subject,
                 Body = body,
                 Sender = sender,

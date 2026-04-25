@@ -8,3 +8,9 @@ obj/
 
 # Ignore UI subfolder so it can be its own separate repo
 EmailAI.UI/
+
+# Secrets — never commit real API keys or credentials
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Staging.json
+*.local.json

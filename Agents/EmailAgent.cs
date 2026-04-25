@@ -13,9 +13,9 @@ namespace EmailAI.Agent.Agents
             _ingestionService = ingestionService;
         }
 
-        public async Task<Email> ProcessEmail(string subject, string body, string sender, string userId)
+        public async Task<Email> ProcessEmail(string subject, string body, string sender, string userId, string? gmailId = null)
         {
-            return await _ingestionService.ProcessAndStoreEmail(subject, body, sender, userId);
+            return await _ingestionService.ProcessAndStoreEmail(subject, body, sender, userId, gmailId);
         }
     }
 }

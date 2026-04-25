@@ -79,8 +79,10 @@ builder.Services.AddScoped<IntelligenceOrchestrator>();
 // Services
 builder.Services.AddScoped<EmbeddingService>();
 builder.Services.AddScoped<VectorDbService>();
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<EmailIngestionService>();
+builder.Services.AddScoped<GmailService>();
 
 // Agents
 builder.Services.AddScoped<EmailAgent>();

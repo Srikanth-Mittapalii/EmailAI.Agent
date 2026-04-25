@@ -25,19 +25,51 @@ namespace EmailAI.Agent.Agents
 
         public async Task<AgentResponse> ProcessQuery(string query, string userId, int limit = 5)
         {
-            var startTime = DateTime.UtcNow;
+            var executionStartTime = DateTime.UtcNow;
+            DateTime? filterStartTime = null;
 
             try
             {
-                // Step 1: Generate embedding for query
-                var embedding = await _embeddingService.GenerateEmbedding(query);
+                // Step 1: Extract intent/timeframe using LLM
+                var intentPrompt = $@"Analyze the following user search query and extract search parameters.
+Identify if the user is asking for emails within a specific timeframe (e.g., 'last 10 days', 'past month', 'yesterday').
+Current Time: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC
 
-                // Step 2: Search vector DB (Filtered by user)
-                var similarEmails = await _vectorDbService.SearchByVector(embedding, userId, limit);
+Query: ""{query}""
 
-                // Step 3: Build context
-                var context = string.Join("\n", similarEmails.Select(e =>
-                    $"- {e.Subject}: {e.Body.Substring(0, Math.Min(200, e.Body.Length))}..."));
+Return ONLY JSON:
+{{
+  ""searchTerm"": ""string"",
+  ""daysAgo"": number | null
+}}";
+                var intentJson = await _intelligence.Ask(intentPrompt);
+                
+                string searchTerm = query;
+                try 
+                {
+                    var json = intentJson.Substring(intentJson.IndexOf('{'), intentJson.LastIndexOf('}') - intentJson.IndexOf('{') + 1);
+                    var intent = System.Text.Json.JsonSerializer.Deserialize<SearchIntent>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (intent?.DaysAgo > 0)
+                    {
+                        filterStartTime = DateTime.UtcNow.AddDays(-intent.DaysAgo.Value);
+                    }
+                    if (!string.IsNullOrEmpty(intent?.SearchTerm))
+                    {
+                        searchTerm = intent.SearchTerm;
+                    }
+                }
+                catch { /* Fallback to raw query */ }
+
+                // Step 2: Generate embedding for query
+                var embedding = await _embeddingService.GenerateEmbedding(searchTerm);
+
+                // Step 3: Search vector DB (Filtered by user and timeframe)
+                var similarEmails = await _vectorDbService.SearchByVector(embedding, userId, limit, filterStartTime);
+
+                // Step 4: Build context
+                var context = similarEmails.Any() 
+                    ? string.Join("\n", similarEmails.Select(e => $"- [{e.Timestamp:yyyy-MM-dd}] {e.Subject}: {e.Body.Substring(0, Math.Min(200, e.Body.Length))}..."))
+                    : "No relevant emails found in the specified timeframe.";
 
                 // Step 4: Ask Gemini to answer
                 var answerPrompt = $@"Answer this question based ONLY on the provided context.
@@ -52,7 +84,7 @@ Answer:";
 
                 var answer = await _intelligence.Ask(answerPrompt);
 
-                var executionTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
+                var executionTime = (DateTime.UtcNow - executionStartTime).TotalMilliseconds;
 
                 return new AgentResponse
                 {
@@ -84,4 +116,10 @@ Answer:";
             return text.Length / 4;
         }
     }
+}
+
+public class SearchIntent
+{
+    public string SearchTerm { get; set; }
+    public int? DaysAgo { get; set; }
 }

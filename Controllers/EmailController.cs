@@ -23,11 +23,34 @@ namespace EmailAI.Agent.Controllers
     {
         private readonly EmailAgent _emailAgent;
         private readonly VectorDbService _vectorDbService;
+        private readonly GmailService _gmailService;
 
-        public EmailController(EmailAgent emailAgent, VectorDbService vectorDbService)
+        public EmailController(EmailAgent emailAgent, VectorDbService vectorDbService, GmailService gmailService)
         {
             _emailAgent = emailAgent;
             _vectorDbService = vectorDbService;
+            _gmailService = gmailService;
+        }
+
+        [HttpPost("sync-gmail")]
+        public async Task<IActionResult> SyncGmail([FromBody] GmailSyncRequest request)
+        {
+            try
+            {
+                string userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+                int count = await _gmailService.SyncLatestEmails(userId, request.AccessToken, request.Limit);
+                return Ok(new { success = true, syncedCount = count });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        public class GmailSyncRequest
+        {
+            public string AccessToken { get; set; } = null!;
+            public int Limit { get; set; } = 100;
         }
 
         [HttpPost("ingest")]

@@ -55,12 +55,71 @@ namespace EmailAI.Agent.Services
         public async Task<string?> Login(string email, string password)
         {
             var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
-            if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            if (user == null || user.PasswordHash == null || !BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
             {
                 return null;
             }
 
             return GenerateJwtToken(user);
+        }
+
+        public async Task<string?> ValidateGoogleToken(string accessToken)
+        {
+            try
+            {
+                // Fetch User Info using Access Token
+                using var client = new System.Net.Http.HttpClient();
+                client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                var response = await client.GetAsync("https://www.googleapis.com/oauth2/v3/userinfo");
+                
+                if (!response.IsSuccessStatusCode) return null;
+
+                var content = await response.Content.ReadAsStringAsync();
+                var googleUser = System.Text.Json.JsonSerializer.Deserialize<GoogleUserInfo>(content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (googleUser == null) return null;
+
+                var user = await _users.Find(u => u.Email == googleUser.Email).FirstOrDefaultAsync();
+                if (user == null)
+                {
+                    user = new User
+                    {
+                        Email = googleUser.Email,
+                        Name = googleUser.Name,
+                        GoogleId = googleUser.Sub,
+                        ProfilePicture = googleUser.Picture,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    await _users.InsertOneAsync(user);
+                }
+                else if (string.IsNullOrEmpty(user.GoogleId))
+                {
+                    // Link existing account
+                    var update = Builders<User>.Update
+                        .Set(u => u.GoogleId, googleUser.Sub)
+                        .Set(u => u.Name, googleUser.Name)
+                        .Set(u => u.ProfilePicture, googleUser.Picture);
+                    await _users.UpdateOneAsync(u => u.Id == user.Id, update);
+                }
+
+                // After successful login, start background sync for Gmail (last 100 emails)
+                // Passing the accessToken to the sync service
+                // _syncService.SyncGmail(user.Id, accessToken); // Todo: Implement SyncService
+
+                return GenerateJwtToken(user);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private class GoogleUserInfo
+        {
+            public string Sub { get; set; } = null!;
+            public string Name { get; set; } = null!;
+            public string Email { get; set; } = null!;
+            public string Picture { get; set; } = null!;
         }
 
         private string GenerateJwtToken(User user)

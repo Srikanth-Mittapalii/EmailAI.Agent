@@ -14,6 +14,9 @@ namespace EmailAI.Agent.Models
         [BsonElement("userId")]
         public string? UserId { get; set; }
 
+        [BsonElement("gmailId")]
+        public string? GmailId { get; set; }
+
         [BsonElement("subject")]
         public string Subject { get; set; }
 
